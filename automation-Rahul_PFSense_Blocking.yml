@@ -1,0 +1,78 @@
+args:
+- description: Name of the List
+  name: list_name
+  required: true
+- description: Data to add in the list
+  name: list_data
+  required: true
+comment: This Automation script is created to update the list in a required format
+  for blocking of IP in PFSense Firewall
+commonfields:
+  id: e8014f6b-64df-4fed-816c-3797904eefe4
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.12.62631
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Rahul_PFSense_Blocking
+outputs:
+- contextPath: IP added to list Successfully
+  description: IP added to list Successfully
+- contextPath: IP aleady present in list
+  description: IP already present in list
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+
+  def add_to_list(list_name: str, list_data: str):
+      # adding data to the list present in XSOAR in next line
+      initial_data = demisto.executeCommand("getList", {"listName": list_name})
+
+      #Checking if IP is available in list or not
+      if list_data in initial_data[0]["Contents"]:
+
+          demisto.results('IP aleady present in list')
+
+      else:
+          adding_data = demisto.executeCommand("addToList",{"listName":list_name, "listData":'\n'+list_data})
+          #collecting the data in list after adding the New Ip
+          collecting_list_Afteraddingdata = demisto.executeCommand("getList", {"listName": list_name})
+          #Removing Comas(,)from the data
+          remove_comas = collecting_list_Afteraddingdata[0]["Contents"].replace(',','')
+          #Set the list with new data as required for S3 bucket
+          update_list_without_comas = demisto.executeCommand("setList", {"listName":list_name,"listData":remove_comas})
+
+          demisto.results('IP added to list Successfully')
+
+
+  def main():
+      list_data = demisto.args().get('list_data')
+      list_name = demisto.args().get('list_name')
+      try:
+          return_results(add_to_list(list_name,list_data))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+type: python

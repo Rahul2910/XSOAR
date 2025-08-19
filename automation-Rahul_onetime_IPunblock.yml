@@ -1,0 +1,200 @@
+args:
+- description: name of the list
+  name: list_name
+  required: true
+- description: Time to Live in Firewall
+  name: Threshold
+  required: true
+commonfields:
+  id: dfb828dc-078c-4ee9-8f9d-c2c1d4e888d5
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.13.72123
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Rahul_onetime_IPunblock
+outputs:
+- contextPath: Olderips
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+  import json
+  from datetime import datetime, timedelta
+  import re
+
+  def remove_from_list(list_name: str, threshold :int):
+
+      pattern = r"^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+
+      #Collecting data from list
+      collect_datafrom_list = demisto.executeCommand("getList", {"listName": list_name})
+
+      #parsing it to json for operations
+      collectdates_fromlist = json.loads(collect_datafrom_list[0]["Contents"])
+      datetime_format_in_list = "%Y-%m-%dT%H:%M:%SZ"
+      datetime_format = "%Y-%m-%d %H:%M:%S"
+      current_time = datetime.now()
+
+      removed_key_list = []
+      #empty dictionary to store the data after calulating the age of IP blocked
+      ip_age_data = {}
+
+      #for loop is to callulate the age of Blocked IP in firewall.
+      for key in collectdates_fromlist:
+
+          entry = collectdates_fromlist[key]
+          entry_datetime = datetime.strptime(entry['Timestamp'],datetime_format_in_list)
+          time_difference = current_time - entry_datetime
+          ip_age_data[key] = time_difference.days
+
+      #the Ip of aged above the threshold are extracted
+      filtered_dict = {k: v for k, v in ip_age_data.items() if v > int(threshold)}
+      #Arranging them in an descending order
+      arrange_big_to_low = dict(sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
+
+
+      eligible_for_unblock_IPV4 = []
+      eligible_for_unblock_IPV6 = []
+
+      for key, value in arrange_big_to_low.items():
+
+          if re.search(pattern, key):
+              eligible_for_unblock_IPV4.append(key)
+          else:
+              eligible_for_unblock_IPV6.append(key)
+
+      #IPv6_unblock = demisto.executeCommand("Rahul_IPUnblocking_IDRetrival", {"ip":','.join(eligible_for_unblock_IPV6),"list_name":"Cloudflare_IDList"})
+      #IPv4_unblock = demisto.executeCommand("Rahul_IPUnblocking_IDRetrival", {"ip":','.join(eligible_for_unblock_IPV4),"list_name":"Cloudflare_IDList"})
+
+
+      print('done')
+
+      retriving_IPID_of_IPV4(eligible_for_unblock_IPV4,collectdates_fromlist)
+
+      if len(eligible_for_unblock_IPV6)>0:
+          print('IPV6 Available')
+          #retriving_IPID_of_IPV6(eligible_for_unblock_IPV6,collectdates_fromlist)
+      else:
+          print('Noting to unblock in IPV6')
+
+      #Taking the top most 500 elements as we have the limit with abuse IPDB.
+      #top_500_above_threshold = dict(list(arrange_big_to_low.items())[:20])
+
+
+      #creating the dictionaries to use them in future if needed
+      # eligible_for_unblock_IPV4 ={}
+      # not_eligible_for_unblock_IPV4 = {}
+
+      # for key in top_500_above_threshold:
+
+      #     reputation_collect = demisto.executeCommand("ip", {"ip":key,"using":"AbuseIPDB_instance_2"})
+      #     IP_reputation = reputation_collect[0]["EntryContext"]['AbuseIPDB(val.IP.Address && val.IP.Address == obj.IP.Address)'][0]
+      #     IP_reputation_value = IP_reputation['IP']['AbuseConfidenceScore']
+      #     if IP_reputation_value <=39:
+      #         eligible_for_unblock_IPV4[key]=IP_reputation_value
+      #     else:
+      #         not_eligible_for_unblock_IPV4[key]=IP_reputation_value
+
+      result = {
+          "Total count of IP's blocked": len(collectdates_fromlist),
+          "Total count of IP's greater than 60days":len(arrange_big_to_low),
+          "oldest Ip in firewall" : str(next(iter(arrange_big_to_low.items()))),
+          "Total count of eligible IPV4 for unblock" : len(eligible_for_unblock_IPV4),
+          "Total count of eligible IPV6 for unblock" : len(eligible_for_unblock_IPV6)
+      }
+
+      #demisto.setContext('Eligible_for_Unblock_IPV4',','.join(eligible_for_unblock_IPV4))
+      #demisto.setContext('Eligible_for_Unblock_IPV6',','.join(eligible_for_unblock_IPV6))
+      #demisto.setContext('Not_eligible_for_Unblock',','.join(not_eligible_for_unblock_IPV4.keys()))
+
+      readable = tableToMarkdown("Output of the Script", result, headers=["Total count of IP's blocked","Total count of IP's greater than 60days","oldest Ip in firewall","Total count of eligible IPV4 for unblock","Total count of eligible IPV6 for unblock"])
+
+      results = CommandResults(
+                  readable_output = readable,
+                  outputs_prefix='Olderips',
+                  outputs =result
+                  )
+
+      return (results)
+
+
+  def retriving_IPID_of_IPV4(eligible_for_unblock_IPV4,collectdates_fromlist):
+
+      Cloudflare_IPID_List_IPV4 = []
+
+      for ip in eligible_for_unblock_IPV4:
+
+          if ip in collectdates_fromlist:
+
+              entry = collectdates_fromlist[ip]
+              IP_ID = entry['id']
+              Cloudflare_IPID_List_IPV4.append(IP_ID)
+
+      cloudflare_unblock = demisto.executeCommand("cloudflare-waf-ip-list-item-delete", {"items_id":','.join(Cloudflare_IPID_List_IPV4),"list_id":"8b5c8b0361e44c048bcad2574c41852d"})
+
+      for ip in eligible_for_unblock_IPV4:
+          demisto.executeCommand("RemoveKeyFromList", {"keyName":ip,"listName":"blacklisted_ip"})
+
+      #Remove_IPS_from_list = demisto.executeCommand("Rahul_Remove_Keys_from_list", {"Keys":','.join(eligible_for_unblock_IPV4),"ListName":"blacklisted_ip"})
+
+      print('ipv4done')
+
+
+
+  def retriving_IPID_of_IPV6(eligible_for_unblock_IPV6,collectdates_fromlist):
+
+      Cloudflare_IPID_List_IPV6 = []
+
+      for ip in eligible_for_unblock_IPV6:
+
+          if ip in collectdates_fromlist:
+
+              entry = collectdates_fromlist[ip]
+              IP_ID = entry['id']
+              Cloudflare_IPID_List_IPV6.append(IP_ID)
+
+      cloudflare_unblock = demisto.executeCommand("cloudflare-waf-ip-list-item-delete", {"items_id":','.join(Cloudflare_IPID_List_IPV6),"list_id":"8b5c8b0361e44c048bcad2574c41852d"})
+      for ip in eligible_for_unblock_IPV6:
+          demisto.executeCommand("RemoveKeyFromList", {"keyName":ip,"listName":"blacklisted_IPV6"})
+      #Remove_IPS_from_list = demisto.executeCommand("Rahul_Remove_Keys_from_list", {"Keys":','.join(eligible_for_unblock_IPV6),"ListName":"blacklisted_IPV6"})
+
+      print('ipv6done')
+
+
+
+
+  def main():
+      list_name = demisto.args().get('list_name')
+      threshold = demisto.args().get('Threshold')
+
+
+      try:
+          # TODO: replace the invoked command function with yours
+          checkOlderips = remove_from_list(list_name, threshold)
+          return_results(checkOlderips)
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+timeout: 10µs
+type: python

@@ -1,0 +1,68 @@
+commonfields:
+  id: 0f98f2ec-d432-4011-8227-4cefb11c0604
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.13.78960
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Sitecore_Check_Uniqueness
+outputs:
+- contextPath: Multiple Incident Types
+  description: Multiple Incident Types
+- contextPath: same Incident types
+  description: same Incident types
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+  import json
+
+
+  def uniqueness(lst):
+      print(lst)
+
+      if len(set(lst))>1:
+          return "Multiple Incident Types"
+      else:
+          return "same Incident types"
+
+  def main():
+      fielddata = demisto.get(demisto.context(),'foundIncidents')
+
+      names=[]
+      if type(fielddata) != dict:
+
+          for entry in fielddata:
+              name = entry.get('name')
+              if name:
+                  names.append(name)
+      else:
+          names.append(fielddata.get("name"))
+      try:
+          result = uniqueness(names)
+          demisto.results(result)
+
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+type: python

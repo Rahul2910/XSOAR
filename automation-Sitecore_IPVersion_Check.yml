@@ -1,0 +1,75 @@
+args:
+- description: 'comma separated IP address '
+  name: IP
+  required: true
+commonfields:
+  id: a868dc41-4adc-4a30-8063-d900bfed0d13
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.13.72123
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Sitecore_IPVersion_Check
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+  import re
+
+  def ipversioncheck(ipaddress: str):
+
+      converting_input_to_list = ipaddress.split(',')
+      pattern = r"^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+
+      IPV4 = []
+      IPV6 = []
+
+      for ip in converting_input_to_list:
+
+          if re.search(pattern, ip):
+              IPV4.append(ip)
+          else:
+              IPV6.append(ip)
+
+      result = {
+          "IPV4": ','.join(IPV4),
+          "IPV6":','.join(IPV6)
+
+      }
+      readable = tableToMarkdown("Output of the Script", result, headers=["IPV4","IPV6"])
+      results = CommandResults(
+                  readable_output = readable,
+                  outputs_prefix='IPVersion',
+                  outputs =result
+                  )
+
+      return (results)
+
+  def main():
+      ipaddress = demisto.args().get('IP')
+      try:
+          return_results(ipversioncheck(ipaddress))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+type: python

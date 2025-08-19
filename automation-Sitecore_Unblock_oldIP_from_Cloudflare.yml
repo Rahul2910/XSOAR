@@ -1,0 +1,195 @@
+args:
+- description: Name of the list in XSOAR that contains IPV4 IP's
+  name: list_name_IPV4
+  required: true
+- description: Name of the list in XSOAR that contains IPV6 IP's
+  name: list_name_IPV6
+  required: true
+- description: TTL to live in list
+  name: Threshold
+  required: true
+commonfields:
+  id: f90cb672-bedb-4c29-8ee9-0788ded8dcdb
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.13.73190
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Sitecore_Unblock_oldIP_from_Cloudflare
+outputs:
+- contextPath: Olderips
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+  import json
+  from datetime import datetime, timedelta
+
+  import re
+
+  def remove_from_list(list_name_IPV4: str, threshold :int, list_name_IPV6: str):
+
+      pattern = r"^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+
+      #Collecting data from list IPV4
+      collect_datafrom_list_IPV4 = demisto.executeCommand("getList", {"listName": list_name_IPV4})
+
+      #parsing it to json for operations
+      collectdates_fromlist_IPV4 = json.loads(collect_datafrom_list_IPV4[0]["Contents"])
+
+      collect_datafrom_list_IPV6 = demisto.executeCommand("getList", {"listName": list_name_IPV6})
+
+      #parsing it to json for operations
+      collectdates_fromlist_IPV6 = json.loads(collect_datafrom_list_IPV6[0]["Contents"])
+
+      current_time = datetime.today()
+
+      removed_key_list = []
+      #empty dictionary to store the data after calulating the age of IP blocked
+      ip_age_data = {}
+
+      #for loop is to callulate the age of Blocked IP in firewall.
+      for key in collectdates_fromlist_IPV4:
+          entry = collectdates_fromlist_IPV4[key]
+          entry_datetime = datetime.strptime(entry, "%Y-%m-%d")
+          time_difference = current_time - entry_datetime
+          ip_age_data[key] = time_difference.days
+
+      for keyIPV6 in collectdates_fromlist_IPV6:
+          entry = collectdates_fromlist_IPV6[keyIPV6]
+          entry_datetime = datetime.strptime(entry, "%Y-%m-%d")
+          time_difference = current_time - entry_datetime
+          ip_age_data[keyIPV6] = time_difference.days
+
+      #the Ip of aged above the threshold are extracted
+      filtered_dict = {k: v for k, v in ip_age_data.items() if v > int(threshold)}
+      #Arranging them in an descending order
+      arrange_big_to_low = dict(sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))
+
+
+      eligible_for_unblock_IPV4 = []
+      eligible_for_unblock_IPV6 = []
+
+      for key, value in arrange_big_to_low.items():
+
+          if re.search(pattern, key):
+              eligible_for_unblock_IPV4.append(key)
+          else:
+              eligible_for_unblock_IPV6.append(key)
+
+      Loading_cloudflare_data = demisto.executeCommand("getList", {"listName": "Cloudflare_IDList"})
+      cloudflare_data = json.loads(Loading_cloudflare_data[0]["Contents"])
+
+      Loading_PFSense_data = demisto.executeCommand("getList", {"listName": "list_for_S3_Bucket"})
+      PFSense_data = Loading_PFSense_data[0]["Contents"].split('\n')
+      print('Unbocking Starts Now')
+      retriving_IPID_of_IPV4(eligible_for_unblock_IPV4,cloudflare_data,PFSense_data,Loading_PFSense_data)
+
+      if len(eligible_for_unblock_IPV6)>0:
+          print('IPV6 Available')
+          retriving_IPID_of_IPV6(eligible_for_unblock_IPV6,cloudflare_data)
+      else:
+          print('Noting to unblock in IPV6')
+
+      result = {
+          "Total count of IP's blocked": len(cloudflare_data),
+          "Total count of IP's greater than 60days":len(arrange_big_to_low),
+          "oldest Ip in firewall" : str(next(iter(arrange_big_to_low.items()))),
+          "Total count of eligible IPV4 for unblock" : len(eligible_for_unblock_IPV4),
+          "Total count of eligible IPV6 for unblock" : len(eligible_for_unblock_IPV6)
+      }
+
+      readable = tableToMarkdown("Output of the Script", result, headers=["Total count of IP's blocked","Total count of IP's greater than 60days","oldest Ip in firewall","Total count of eligible IPV4 for unblock","Total count of eligible IPV6 for unblock"])
+
+      results = CommandResults(
+                  readable_output = readable,
+                  outputs_prefix='Olderips',
+                  outputs =result
+                  )
+      return (results)
+
+  def retriving_IPID_of_IPV4(eligible_for_unblock_IPV4,cloudflare_data,PFSense_data,Loading_PFSense_data):
+
+      pfsensedata_modified = []
+      for ip in eligible_for_unblock_IPV4:
+          pfsensedata_modified.append(ip + "/32")
+
+
+      for elem in pfsensedata_modified:
+          if elem in Loading_PFSense_data[0]["Contents"]:
+              PFSense_data.remove(elem)
+
+      After_remove_data = '\n'.join(PFSense_data)
+      update_newdata = demisto.executeCommand("setList", {"listName":"list_for_S3_Bucket","listData":After_remove_data})
+
+      print("list_for_S3_Bucket_test is updated with new data")
+
+      Cloudflare_IPID_List_IPV4 = []
+
+      for ip in eligible_for_unblock_IPV4:
+
+          if ip in cloudflare_data:
+
+              entry = cloudflare_data[ip]
+              IP_ID = entry['id']
+              Cloudflare_IPID_List_IPV4.append(IP_ID)
+
+      cloudflare_unblock = demisto.executeCommand("cloudflare-waf-ip-list-item-delete", {"items_id":','.join(Cloudflare_IPID_List_IPV4),"list_id":"8b5c8b0361e44c048bcad2574c41852d"})
+
+      for ip in eligible_for_unblock_IPV4:
+          demisto.executeCommand("RemoveKeyFromList", {"keyName":ip,"listName":"blacklisted_ip"})
+      #print(','.join(Cloudflare_IPID_List_IPV4))
+      print('ipv4done')
+
+  def retriving_IPID_of_IPV6(eligible_for_unblock_IPV6,cloudflare_data):
+
+      Cloudflare_IPID_List_IPV6 = []
+
+      for ipv6 in eligible_for_unblock_IPV6:
+
+          if ipv6 in cloudflare_data:
+
+              entryipv6 = cloudflare_data[ipv6]
+              IP_ID_ipv6 = entryipv6['id']
+              Cloudflare_IPID_List_IPV6.append(IP_ID_ipv6)
+
+      cloudflare_unblock = demisto.executeCommand("cloudflare-waf-ip-list-item-delete", {"items_id":','.join(Cloudflare_IPID_List_IPV6),"list_id":"8b5c8b0361e44c048bcad2574c41852d"})
+      for ip in eligible_for_unblock_IPV6:
+          demisto.executeCommand("RemoveKeyFromList", {"keyName":ip,"listName":"blacklisted_IPV6"})
+      print('ipv6done')
+
+  def main():
+      list_name_IPV4 = demisto.args().get('list_name_IPV4')
+      list_name_IPV6 = demisto.args().get('list_name_IPV6')
+      threshold = demisto.args().get('Threshold')
+
+
+      try:
+          # TODO: replace the invoked command function with yours
+          checkOlderips = remove_from_list(list_name_IPV4, threshold, list_name_IPV6)
+          return_results(checkOlderips)
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+timeout: 10µs
+type: python

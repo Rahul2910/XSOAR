@@ -1,0 +1,103 @@
+args:
+- description: The CF ID list
+  name: Cloudflare_list_ID
+  required: true
+- description: Name of the list
+  name: list_name
+  required: true
+commonfields:
+  id: 251b95ab-893d-4406-863a-2058f772aa70
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.11.61265
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Rahul_IP_ID_Collection_Script
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+  from datetime import datetime
+  import json
+
+  def convert_IPID_data_to_json(Cloudflare_list_ID: str, list_name:str):
+
+      data = demisto.executeCommand("cloudflare-waf-ip-list-item-list", {"list_id": Cloudflare_list_ID, "using": "Cloudflare staging better coding", "execution-timeout":15000})
+      data1 = data[0]["Contents"]
+
+      i=0
+      complete_list = {}
+
+      # print(datetime.now())
+      #demisto.setContext('typeofdata', type(data1))
+      print(type(data1))
+
+      if type(data1) is list:
+          print("entered if loop")
+          while i <len(data1):
+              Key = data1[i]["ip"]
+              ip_id = data1[i]['id']
+              modified_on = data1[i]['modified_on']
+              complete_list[Key] = {"id": ip_id, "Timestamp": modified_on}
+              i=i+1
+
+          jsondata = json.dumps(complete_list)
+          update_list_without_comas = demisto.executeCommand("setList", {"listName":list_name,"listData":jsondata})
+
+
+
+      else:
+          print("entered else loop")
+          items1 = data1["items"]
+          while i <len(items1):
+              Key = items1[i]["ip"]
+              ip_id = items1[i]['id']
+              modified_on = items1[i]['modified_on']
+              complete_list[Key] = {"id": ip_id, "Timestamp": modified_on}
+              i=i+1
+
+          jsondata = json.dumps(complete_list)
+          update_list_without_comas = demisto.executeCommand("setList", {"listName":list_name,"listData":jsondata})
+
+
+
+      demisto.setContext('countofIPs', len(complete_list))
+      # demisto.setContext('typeofdata', type(data1))
+      # print(type(data1))
+      #demisto.results('list is successfully updated')
+      return f"list is successfully updated"
+
+
+  def main():
+      Cloudflare_List = demisto.args().get('Cloudflare_list_ID')
+      list_name = demisto.args().get('list_name')
+
+      try:
+          return_results(convert_IPID_data_to_json(Cloudflare_List,list_name))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+
+
+  if __name__ in ('__builtin__', 'builtins', '__main__'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+timeout: 15µs
+type: python

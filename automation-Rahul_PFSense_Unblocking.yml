@@ -1,0 +1,90 @@
+args:
+- description: IP to remove from list
+  name: ip
+  required: true
+- description: name of the list
+  name: list_name
+  required: true
+commonfields:
+  id: f75e8f57-a651-4703-80ae-1260249693cb
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.12.66339
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Rahul_PFSense_Unblocking
+outputs:
+- contextPath: IP is removed from the list
+  description: IP is removed from the list
+- contextPath: IP is not present in the list
+  description: IP is not present in the list
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+
+  def remove_from_list(list_name: str, list_data: str):
+      # adding data to the list present in XSOAR in next line
+      initial_data = demisto.executeCommand("getList", {"listName": list_name})
+      #the complete data collected is in list
+      #In the list the required data is in contents and the contents are in string format.
+      #so we are converting the string to list for the operation
+      data_to_list =initial_data[0]["Contents"].split('\n')
+
+      #Checking if IP is available in list or not
+      converting_input_to_list = list_data.split(',')
+
+      iplist_modified = []
+      Removed_ip = []
+      not_available_ip = []
+      for ip in converting_input_to_list:
+          iplist_modified.append(ip + "/32")
+
+      for elem in iplist_modified:
+          if elem in initial_data[0]["Contents"]:
+              #the required data is removed from the list
+              data_to_list.remove(elem)
+              Removed_ip.append(elem)
+          else:
+              not_available_ip.append(elem)
+
+      print(not_available_ip)
+      After_remove_data = '\n'.join(data_to_list)
+      update_newdata = demisto.executeCommand("setList", {"listName":list_name,"listData":After_remove_data})
+
+      if len(Removed_ip)>0:
+          demisto.results('IP is removed from the list')
+      else:
+          demisto.results('IP is not present in the list')
+
+
+  def main():
+      list_data = demisto.args().get('ip')
+      list_name = demisto.args().get('list_name')
+      try:
+          return_results(remove_from_list(list_name,list_data))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+type: python

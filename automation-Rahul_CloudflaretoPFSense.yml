@@ -1,0 +1,70 @@
+args:
+- description: list_name_1
+  name: list_name_1
+  required: true
+- description: list_name_2
+  name: list_name_2
+  required: true
+commonfields:
+  id: 589d0fbb-c0dd-4792-854e-67e7746b92b5
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.13.73190
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Rahul_CloudflaretoPFSense
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+  import json
+  from datetime import datetime, timedelta
+
+  def convertingcloudflaretoPFsense(list_name_1: str, list_name_2: str):
+      #Collect data from list
+      collect_datafrom_list = demisto.executeCommand("getList", {"listName": list_name_1})
+      collectdates_fromlist = json.loads(collect_datafrom_list[0]["Contents"])
+      print(len(collectdates_fromlist))
+      print(type(collectdates_fromlist))
+
+      pfsensedata =""
+
+      for key in collectdates_fromlist:
+          pfsensedata += key + "/32" + "\n"
+          #pfsensedata.append(key+"/32")
+
+      update_list_without_comas = demisto.executeCommand("setList", {"listName":list_name_2,"listData":pfsensedata})
+      #return str(removed_key_list)
+
+  def main():
+      list_name_1 = demisto.args().get('list_name_1')
+      list_name_2 = demisto.args().get('list_name_2')
+
+
+      try:
+          # TODO: replace the invoked command function with yours
+          return_results(convertingcloudflaretoPFsense(list_name_1, list_name_2))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+type: python

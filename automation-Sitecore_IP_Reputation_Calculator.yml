@@ -1,0 +1,121 @@
+args:
+- description: Recorded Future Score
+  name: Recorded_Future_Score
+- description: Abuse IPdb SCore
+  name: AbuseIPDB_Score
+- description: Rule Risk Score
+  name: Rule_Risk_Score
+- description: Mitre Tactic
+  name: Mitre_Tactic
+- description: Recorded Future Verdict
+  name: Recorded_Future_Verdict
+commonfields:
+  id: 23a6d132-49fe-418d-8a87-df869425da91
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.13.83255
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Sitecore_IP_Reputation_Calculator
+outputs:
+- contextPath: Sitecore Risk Score
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+
+  def IP_Reputation_Calculator(recordedfuture_score:int ,abuseipdb_score:int, rulerisk_score:int, mitre_tactic_id:str,recordedfuture_verdict:int ):
+      Mitre_dict ={'TA0043':'50', 'TA0042':'60','TA0001':'60','TA0002':'75','TA0003':'60','TA0004':'75','TA0005':'70','TA0006':'75','TA0007':'50','TA0008':'70','TA0009':'80','TA0010':'75','TA0011':'75','TA0040':'100'}
+      sitecoreriskscore =0
+
+      # rulerisk_score = int(rulerisk_score)*0.1
+      # mitre_tactic_score = int(Mitre_dict[mitre_tactic_id])*0.1
+      # recordedfuture_score = int(recordedfuture_score)*0.8
+      # abuseipdb_score = int(abuseipdb_score)*0.2
+
+
+      #sitecoreriskscore = rulerisk_score+mitre_tactic_score+recordedfuture_score+abuseipdb_score
+
+
+      if int(recordedfuture_score)>=0 and int(abuseipdb_score)>=0:
+          if int(recordedfuture_verdict)>1:
+              rulerisk_score = int(rulerisk_score)*0.1
+              if not mitre_tactic_id:
+                  mitre_tactic_score = 0
+              else:
+                  mitre_tactic_score = int(Mitre_dict[mitre_tactic_id])*0.1
+
+              recordedfuture_score = int(recordedfuture_score)
+              sitecoreriskscore = int(rulerisk_score+mitre_tactic_score+recordedfuture_score)
+              if sitecoreriskscore>100:
+                  sitecoreriskscore = 100
+
+          else:
+              rulerisk_score = int(rulerisk_score)*0.1
+              if not mitre_tactic_id:
+                  mitre_tactic_score = 0
+              else:
+                  mitre_tactic_score = int(Mitre_dict[mitre_tactic_id])*0.1
+
+              recordedfuture_score = int(recordedfuture_score)*0.8
+              abuseipdb_score = int(abuseipdb_score)*0.2
+              sitecoreriskscore = int(rulerisk_score+mitre_tactic_score+recordedfuture_score+abuseipdb_score)
+      else:
+          sitecoreriskscore =0
+          print("Data not present")
+
+
+
+      finalscore_range = {range(0, 31):'Benign', range(31, 51):'suspicious',range(51, 71):'Moderate',range(71, 101):'Malicious'}
+      verdict = next((verdict for score_range, verdict in finalscore_range.items() if sitecoreriskscore in score_range),'Invalid Score')
+
+      result ={
+          "value" : sitecoreriskscore,
+          "verdict" : verdict
+
+      }
+      readable = tableToMarkdown("Output of the Script", result, headers=["value","verdict"])
+      results = CommandResults(
+                  readable_output = readable,
+                  outputs_prefix='sitecoreriskscore',
+                  outputs =result
+                  )
+
+      demisto.executeCommand("setIncident", {"sitecoreriskscore":int(sitecoreriskscore), "sitecoreriskverdict":str(verdict)})
+
+      return (results)
+
+  def main():
+      recordedfuture_score = demisto.args().get('Recorded_Future_Score')
+      abuseipdb_score = demisto.args().get('AbuseIPDB_Score')
+      rulerisk_score = demisto.args().get('Rule_Risk_Score')
+      mitre_tactic_id = demisto.args().get('Mitre_Tactic')
+      recordedfuture_verdict = demisto.args().get('Recorded_Future_Verdict')
+      try:
+          # TODO: replace the invoked command function with yours
+          return_results(IP_Reputation_Calculator(recordedfuture_score, abuseipdb_score, rulerisk_score, mitre_tactic_id,recordedfuture_verdict))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+type: python

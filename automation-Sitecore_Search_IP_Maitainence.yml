@@ -1,0 +1,139 @@
+args:
+- description: ID of the IP Set to modify in AWS WAF
+  name: AWS_WAF_Set_ID
+  required: true
+- description: Name of the IP Set in AWS WAF.
+  name: AWS_WAF_Set_Name
+  required: true
+- auto: PREDEFINED
+  description: Region of the IP list in AWS WAF.
+  name: AWS_WAF_Set_Region
+  predefined:
+  - us-east-1
+  - us-east-2
+  - us-west-1
+  - us-west-2
+  - ca-central-1
+  - eu-west-1
+  - eu-central-1
+  - eu-west-2
+  - ap-northeast-1
+  - ap-northeast-2
+  - ap-southeast-1
+  - ap-southeast-2
+  - ap-south-1
+  - sa-east-1
+  - eu-north-1
+  - eu-west-3
+  - us-gov-east-1
+  - us-gov-west-1
+  required: true
+- description: Name of the list in XSOAR
+  name: List_Name
+  required: true
+- auto: PREDEFINED
+  description: Usage purpose of this Automation
+  name: Purpose_of_Use
+  predefined:
+  - IP_Unblocking_Manual
+  - Daily_Maintainence
+  required: true
+- description: Comma separated list of IP’s to unblock from AWS AWF and XSOAR.
+  name: IPs_to_Unblock
+- description: Time to Live (TTL) of the IP in days
+  name: Threshold
+comment: The purpose of the Automation is to unblock or maintain in the WAF blocked
+  IP Set.
+commonfields:
+  id: 185c7a5b-b703-41f1-854d-fd414676236a
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.13.89009
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Sitecore_Search_IP_Maitainence
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from datetime import datetime, timedelta
+  from typing import Dict, Any
+  import traceback
+
+  def IP_removal(list_name: str, Set_ID: str ,Set_Name: str ,Set_Region: str, Purpose: str, Ips: str, threshold:int):
+
+      IP_data_from_AWS_WAF = demisto.executeCommand("aws-waf-ip-set-get", {"id": Set_ID, "name":Set_Name, "region":Set_Region })[0]["Contents"]['IPSet']['Addresses'] #Collecting the data from AWS WAF
+      XSOAR_list_data = json.loads(demisto.executeCommand("getList", {"listName": list_name})[0]["Contents"]) #Collecting the data from XSOAR List
+      current_time = datetime.now().date()
+
+      if "IP_Unblocking_Manual" == Purpose: #This condition is for Unblocking of IP from the AWS WAF
+          Ips_to_unblock = Ips.split(',')
+          suffix = "/32"
+          modified_list = [ip + suffix for ip in Ips_to_unblock]
+
+          for items in modified_list:
+              if items in IP_data_from_AWS_WAF :
+                  IP_data_from_AWS_WAF.remove(items) #This line removes the data and make it ready to upload in WAF
+                  demisto.executeCommand("RemoveKeyFromList",{"keyName":items,"listName":list_name}) #This line removes IP's from XSOAR stored List.
+
+          updated_IPs = ','.join(IP_data_from_AWS_WAF)
+          demisto.executeCommand("aws-waf-ip-set-update",{"id": Set_ID, "name":Set_Name, "region":Set_Region, "addresses":updated_IPs, "is_overwrite":"true"})#Uploads the new IP's to the WAF
+
+          return Ips_to_unblock
+
+      else: #This block is used for Regular(every day) maintainence of IP's in the AWS WAF
+          ip_age_data = {} #Empty Dictionary
+
+          for key in list(XSOAR_list_data.keys()): #Calculating the age of the blocked IP
+              Ip_date = datetime.strptime(XSOAR_list_data[key], "%Y-%m-%d").date()
+              time_difference = current_time - Ip_date
+              ip_age_data[key] = time_difference.days
+
+          filtered_dict = {k: v for k, v in ip_age_data.items() if v > int(threshold)} #Filtering the date of IP Age greater than the Threshold.
+          arrange_big_to_low = dict(sorted(filtered_dict.items(), key=lambda item: item[1], reverse=True))#Sorting them based on the age.
+
+          for elements in list(arrange_big_to_low.keys()):
+              IP_data_from_AWS_WAF.remove(elements) #This line removes the data and make it ready to upload in WAF
+
+          updated_IPs = ','.join(IP_data_from_AWS_WAF)
+
+          demisto.executeCommand("aws-waf-ip-set-update",{"id": Set_ID, "name":Set_Name, "region":Set_Region, "addresses":updated_IPs, "is_overwrite":"true"}) #Uploads the new IP's to the WAF
+
+          for events in list(arrange_big_to_low.keys()):
+              demisto.executeCommand("RemoveKeyFromList",{"keyName":events,"listName":list_name}) #This line removes IP's from XSOAR stored List.
+
+          return arrange_big_to_low.keys()
+
+  def main():
+      list_name = demisto.args().get('List_Name')
+      Set_ID = demisto.args().get('AWS_WAF_Set_ID')
+      Set_Name = demisto.args().get('AWS_WAF_Set_Name')
+      Set_Region = demisto.args().get('AWS_WAF_Set_Region')
+      Purpose = demisto.args().get('Purpose_of_Use')
+      Ips = demisto.args().get('IPs_to_Unblock')
+      threshold = demisto.args().get('Threshold')
+      try:
+          # TODO: replace the invoked command function with yours
+          return_results(IP_removal(list_name, Set_ID,Set_Name,Set_Region,Purpose,Ips,threshold))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+type: python

@@ -1,0 +1,313 @@
+args:
+- description: 'Occured Time '
+  name: start_time
+- description: Closed time of incident
+  name: end_time
+- description: owner of incident
+  name: owner
+commonfields:
+  id: 61411ab5-1609-40be-89fd-cd76f2e870e0
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.12.63474
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Rahul_Resolution_time_draft
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |
+  from datetime import datetime, timedelta
+  from dateutil.parser import parse
+
+  # Define the business hours (in 24-hour format) and weekdays
+  business_hours = [(datetime.strptime('09:00:00', '%H:%M:%S').time(), datetime.strptime('18:00:00', '%H:%M:%S').time())]
+  weekdays = [1, 2, 3, 4, 5]  # Monday to Friday
+
+
+
+  def calculate_resolution_time(start_time, end_time,owner:str):
+
+      start_time = datetime.strptime(start_time.split('.')[0] + 'Z', "%Y-%m-%dT%H:%M:%SZ")
+      end_time = datetime.strptime(end_time.split('.')[0] + 'Z', "%Y-%m-%dT%H:%M:%SZ")
+
+      #resolution_time = 0
+      #print(start_time)
+
+      if owner == None:
+          resolution_time = int((end_time - start_time).total_seconds() / 60)
+          #demisto.executeCommand("setIncident", {"managementresolutiontime":resolution_time})
+          print(resolution_time)
+
+      else:
+          start_of_business_day_firstday = datetime.combine(start_time.date(), business_hours[0][0])
+          end_of_business_day_firstday = datetime.combine(start_time.date(), business_hours[0][1])
+          start_of_business_day_lastday = datetime.combine(end_time.date(), business_hours[0][0])
+          end_of_business_day_lastday = datetime.combine(end_time.date(), business_hours[0][1])
+          days_between = (end_time.date() - start_time.date()).days
+
+          days = 0
+          print(days_between)
+
+          for days in range(days_between):
+
+              # if start_time.date() != end_time.date():
+
+              #     if start_time.weekday() <5 and start_time.time() < business_hours[0][0]:
+              #         resolution_time = int((end_of_business_day_firstday - start_of_business_day_firstday).total_seconds() / 60)
+              #         print(f'Entered {days} day before business hours and resolution time is {resolution_time}')
+              #     elif start_time.weekday() <5 and business_hours[0][0] <= start_time.time() <= business_hours[0][1]:
+              #         resolution_time = int((end_of_business_day_firstday - start_time).total_seconds() / 60)
+              #         print(f'Entered {days} day during business hoursand resolution time is {resolution_time}')
+              #     elif start_time.weekday() <5 and start_time.time() > business_hours[0][1]:
+              #         resolution_time = 0
+              #         print(f'Entered {days} day after business hoursand resolution time is {resolution_time}')
+              #     elif start_time.weekday()>=5:
+              #         resolution_time = 0
+              #         print(f'Entered {days} day is a weekendand resolution time is {resolution_time}')
+
+              #     start_time = start_time + timedelta(days=1)
+              #     print(start_time)
+              # else:
+              #     if start_time.weekday() <5 and start_time.time() < business_hours[0][0]:
+              #         resolution_time = int((end_of_business_day_firstday - start_of_business_day_firstday).total_seconds() / 60)
+              #         print(f'Entered end day before business hours and resolution time is {resolution_time}')
+              #     elif start_time.weekday() <5 and business_hours[0][0] <= start_time.time() <= business_hours[0][1]:
+              #         resolution_time = int((end_of_business_day_firstday - start_time).total_seconds() / 60)
+              #         print(f'Entered end day during business hoursand resolution time is {resolution_time}')
+              #     elif start_time.weekday() <5 and start_time.time() > business_hours[0][1]:
+              #         resolution_time = 0
+              #         print(f'Entered end day after business hoursand resolution time is {resolution_time}')
+              #     elif start_time.weekday()>=5:
+              #         resolution_time = 0
+              #         print(f'Entered end day is a weekendand resolution time is {resolution_time}')
+
+          #print(resolution_time)
+
+
+          # if start_time.weekday() < 5 and end_time.weekday() < 5:
+          #     if start_time.date() == end_time.date():
+          #         if business_hours[0][0] <= start_time.time() <= business_hours[0][1]:
+          #             if business_hours[0][0] <= end_time.time() < business_hours[0][1]:
+          #                 resolution_time = int((end_time - start_time).total_seconds() / 60)
+          #                 #demisto.executeCommand("setIncident", {"managementresolutiontime":resolution_time})
+          #                 print("Incident triggered and resolved in business hours", resolution_time )
+          #             else:
+          #                 end_of_business_day = datetime.combine(end_time.date(), business_hours[0][1])
+          #                 resolution_time = int((end_of_business_day - start_time).total_seconds() / 60)
+          #                 #demisto.executeCommand("setIncident", {"managementresolutiontime":resolution_time})
+          #                 print("Incident triggered in business hours on Weekday(on same date) resolved late evening", resolution_time)
+          #         elif business_hours[0][0] <= end_time.time() < business_hours[0][1]:
+          #             start_of_business_day = datetime.combine(start_time.date(), business_hours[0][0])
+          #             resolution_time = int((start_of_business_day - start_time).total_seconds() / 60)
+          #             #demisto.executeCommand("setIncident", {"managementresolutiontime":resolution_time})
+          #             print("Incident triggered before business hours on Weekday(on same date)and resolved in business hours", resolution_time)
+          #         else:
+          #             start_of_business_day = datetime.combine(start_time.date(), business_hours[0][0])
+          #             end_of_business_day = datetime.combine(end_time.date(), business_hours[0][1])
+          #             resolution_time = int((end_of_business_day - start_of_business_day).total_seconds() / 60)
+          #             print("Incident triggered before business hours on Weekday(on same date)and resolved after business hours ", resolution_time)
+          #     else:
+          #         start_of_business_day_firstday = datetime.combine(start_time.date(), business_hours[0][0])
+          #         end_of_business_day_firstday = datetime.combine(start_time.date(), business_hours[0][1])
+          #         start_of_business_day_lastday = datetime.combine(end_time.date(), business_hours[0][0])
+          #         end_of_business_day_lastday = datetime.combine(end_time.date(), business_hours[0][1])
+          #         days_between = (end_time.date() - start_time.date()).days - 1
+
+
+          #         if start_time.time() < business_hours[0][0]:
+          #             resolution_time = int((end_of_business_day_firstday - start_of_business_day_firstday).total_seconds() / 60)
+          #             print("Entered First day before business hours",resolution_time)
+          #         elif business_hours[0][0] <= start_time.time() <= business_hours[0][1]:
+          #             resolution_time = int((end_of_business_day_firstday - start_time).total_seconds() / 60)
+          #             print("Entered First day during business hours",resolution_time)
+          #         else:
+          #             resolution_time = 0
+          #             print("Entered First day after business hours",resolution_time)
+
+          #         resolution_time += int((end_of_business_day_firstday - start_of_business_day_firstday).total_seconds() / 60) * days_between  # Full days in between
+
+          #         print("entered in between days",resolution_time)
+
+          #         if end_time.time() < business_hours[0][0] :
+          #             resolution_time +=0
+          #             print("Entered last day before business hours",resolution_time)
+          #         elif business_hours[0][0] <= end_time.time() <= business_hours[0][1]:
+          #             resolution_time += int((end_time - start_of_business_day_lastday).total_seconds() / 60)
+          #             print("Entered last day during business hours",resolution_time)
+          #         else:
+          #             int((end_of_business_day_lastday - start_of_business_day_lastday).total_seconds() / 60)
+          #             resolution_time += int((end_of_business_day_lastday - start_of_business_day_lastday).total_seconds() / 60)  # Time on the last day
+          #             print("Entered last day after business hours",resolution_time)
+
+          #         print("Final resolution time",resolution_time)
+
+          # else:
+
+          #     print('either start or end is not a weekday')
+
+              #resolution_time = start_time - end_time
+
+  def weekday():
+      if start_time.weekday() < 5 and end_time.weekday() < 5:
+          if start_time.date() == end_time.date():
+              if business_hours[0][0] <= start_time.time() <= business_hours[0][1]:
+                  if business_hours[0][0] <= end_time.time() < business_hours[0][1]:
+                      resolution_time = int((end_time - start_time).total_seconds() / 60)
+                      #demisto.executeCommand("setIncident", {"managementresolutiontime":resolution_time})
+                      print("Incident triggered and resolved in business hours", resolution_time )
+                  else:
+                      end_of_business_day = datetime.combine(end_time.date(), business_hours[0][1])
+                      resolution_time = int((end_of_business_day - start_time).total_seconds() / 60)
+                      #demisto.executeCommand("setIncident", {"managementresolutiontime":resolution_time})
+                      print("Incident triggered in business hours on Weekday(on same date) resolved late evening", resolution_time)
+              elif business_hours[0][0] <= end_time.time() < business_hours[0][1]:
+                  start_of_business_day = datetime.combine(start_time.date(), business_hours[0][0])
+                  resolution_time = int((start_of_business_day - start_time).total_seconds() / 60)
+                  #demisto.executeCommand("setIncident", {"managementresolutiontime":resolution_time})
+                  print("Incident triggered before business hours on Weekday(on same date)and resolved in business hours", resolution_time)
+              else:
+                  start_of_business_day = datetime.combine(start_time.date(), business_hours[0][0])
+                  end_of_business_day = datetime.combine(end_time.date(), business_hours[0][1])
+                  resolution_time = int((end_of_business_day - start_of_business_day).total_seconds() / 60)
+                  print("Incident triggered before business hours on Weekday(on same date)and resolved after business hours ", resolution_time)
+          else:
+              start_of_business_day_firstday = datetime.combine(start_time.date(), business_hours[0][0])
+              end_of_business_day_firstday = datetime.combine(start_time.date(), business_hours[0][1])
+              start_of_business_day_lastday = datetime.combine(end_time.date(), business_hours[0][0])
+              end_of_business_day_lastday = datetime.combine(end_time.date(), business_hours[0][1])
+              days_between = (end_time.date() - start_time.date()).days - 1
+
+
+              if start_time.time() < business_hours[0][0]:
+                  resolution_time = int((end_of_business_day_firstday - start_of_business_day_firstday).total_seconds() / 60)
+                  print("Entered First day before business hours",resolution_time)
+              elif business_hours[0][0] <= start_time.time() <= business_hours[0][1]:
+                  resolution_time = int((end_of_business_day_firstday - start_time).total_seconds() / 60)
+                  print("Entered First day during business hours",resolution_time)
+              else:
+                  resolution_time = 0
+                  print("Entered First day after business hours",resolution_time)
+
+              resolution_time += int((end_of_business_day_firstday - start_of_business_day_firstday).total_seconds() / 60) * days_between  # Full days in between
+
+              print("entered in between days",resolution_time)
+
+              if end_time.time() < business_hours[0][0] :
+                  resolution_time +=0
+                  print("Entered last day before business hours",resolution_time)
+              elif business_hours[0][0] <= end_time.time() <= business_hours[0][1]:
+                  resolution_time += int((end_time - start_of_business_day_lastday).total_seconds() / 60)
+                  print("Entered last day during business hours",resolution_time)
+              else:
+                  int((end_of_business_day_lastday - start_of_business_day_lastday).total_seconds() / 60)
+                  resolution_time += int((end_of_business_day_lastday - start_of_business_day_lastday).total_seconds() / 60)  # Time on the last day
+                  print("Entered last day after business hours",resolution_time)
+
+              print("Final resolution time",resolution_time)
+
+
+  def weekend():
+
+
+
+
+
+  def main():
+      # Get incident start and end time as inputs
+      start_time = demisto.args().get('start_time')
+      end_time = demisto.args().get('end_time')
+      owner = demisto.args().get('owner')
+
+
+      try:
+          # TODO: replace the invoked command function with yours
+          return_results(calculate_resolution_time(start_time, end_time,owner))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+
+
+
+
+
+  # from datetime import datetime, timedelta
+
+  # # Define business hours (9:00 AM to 6:00 PM) for weekdays (Monday to Friday)
+  # business_start_time = datetime.strptime('09:00', '%H:%M').time()
+  # business_end_time = datetime.strptime('18:00', '%H:%M').time()
+
+  # def parse_timestamp(timestamp_str):
+  #     # Parse the timestamp string into a datetime object
+  #     return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%SZ")
+
+  # def calculate_business_resolution_time(start_time_str, end_time_str):
+  #     start_time = parse_timestamp(start_time_str)
+  #     end_time = parse_timestamp(end_time_str)
+
+  #     # Check if the start and end times are on the same day
+  #     if start_time.date() == end_time.date():
+  #         # Check if the start time is within business hours
+  #         if business_start_time <= start_time.time() < business_end_time:
+  #             # Check if the end time is within business hours
+  #             if business_start_time <= end_time.time() < business_end_time:
+  #                 # Calculate the resolution time in hours
+  #                 resolution_time = (end_time - start_time).total_seconds() / 3600
+  #             else:
+  #                 # Calculate the resolution time until the end of the business day
+  #                 end_of_business_day = datetime.combine(start_time.date(), business_end_time)
+  #                 resolution_time = (end_of_business_day - start_time).total_seconds() / 3600
+  #         else:
+  #             # Calculate the resolution time starting from the beginning of the next business day
+  #             next_business_day = start_time + timedelta(days=1)
+  #             next_business_day = datetime.combine(next_business_day.date(), business_start_time)
+  #             resolution_time = (end_time - next_business_day).total_seconds() / 3600
+  #     else:
+  #         # Calculate the resolution time for incidents spanning multiple days
+  #         days_between = (end_time.date() - start_time.date()).days - 1
+  #         resolution_time = (business_end_time - start_time.time()).seconds / 3600  # Time on the first day
+  #         resolution_time += (business_end_time - business_start_time).seconds / 3600 * days_between  # Full days in between
+  #         resolution_time += (end_time.time() - business_start_time).seconds / 3600  # Time on the last day
+
+  #     return resolution_time
+
+  # def calculate_resolution_time(start_time, end_time):
+  #     start_time = start_time.split('.')[0] + 'Z'
+  #     end_time = end_time.split('.')[0] + 'Z'
+  #     resolution_time = calculate_business_resolution_time(start_time, end_time)
+  #     return int(resolution_time)  # Convert resolution_time to an integer (minutes)
+
+  # def main():
+  #     # Get incident start and end time as inputs (replace these with your inputs)
+  #     start_time = "2023-09-08T10:00:00Z"
+  #     end_time = "2023-09-08T12:00:00Z"
+
+  #     try:
+  #         # Call the calculate_resolution_time function
+  #         resolution_time = calculate_resolution_time(start_time, end_time)
+  #         print("Resolution time:", resolution_time, "minutes")
+  #     except Exception as ex:
+  #         print(f'Failed to calculate resolution time. Error: {str(ex)}')
+
+  # if __name__ in ('__main__', '__builtin__', 'builtins'):
+  #     main()
+scripttarget: 0
+subtype: python3
+tags: []
+type: python

@@ -1,0 +1,87 @@
+args:
+- description: Name of the list in XSOAR
+  name: list_name
+  required: true
+- description: TTL for the data in the List
+  name: Threshold
+- description: Name of the slack Channel for the notification
+  name: slack_channel
+  required: true
+commonfields:
+  id: 1c8f8d1f-6917-4226-81ce-e3be809cbdcd
+  version: -1
+contentitemexportablefields:
+  contentitemfields:
+    definitionid: ""
+    fromServerVersion: ""
+    itemVersion: ""
+    packID: ""
+    packName: ""
+    prevname: ""
+    propagationLabels:
+    - all
+    toServerVersion: ""
+dockerimage: demisto/python3:3.10.13.78960
+enabled: true
+engineinfo: {}
+mainengineinfo: {}
+name: Rahul_Abuseipdblist_IPRemoval
+pswd: ""
+runas: DBotWeakRole
+runonce: false
+script: |+
+  from typing import Dict, Any
+  import traceback
+  import json
+  from datetime import datetime, timedelta
+
+  def remove_from_list(list_name: str, threshold :int, slack_channel : str):
+      #Collect data from list
+      collect_datafrom_list = demisto.executeCommand("getList", {"listName": list_name})
+      #parsing it to json
+      collectdates_fromlist = json.loads(collect_datafrom_list[0]["Contents"])
+      datetime_format = "%Y-%m-%d %H:%M:%S"
+      current_time = datetime.now()
+
+      Keys_list = []
+      removed_key_list = []
+
+      for key in collectdates_fromlist.keys():
+          Keys_list.append(key)
+
+
+      for key in Keys_list:
+
+          entry = json.loads(collectdates_fromlist[key])
+          entry_datetime = datetime.strptime(entry['Timestamp'],datetime_format)
+          time_difference = current_time - entry_datetime
+
+          difference_in_minutes = time_difference.total_seconds() / 60
+
+
+          if int(difference_in_minutes)>int(threshold):
+              removeip_fromlist = demisto.executeCommand("RemoveKeyFromList", {"listName":list_name,"keyName":key})
+              removed_key_list.append(key)
+
+      demisto.executeCommand("send-notification", {"message": "Data has been removed from AbuseIPDB Score storage list as they reached End of Life(6Hrs)" + "\n number of Removed IP's: " + str(len(removed_key_list)), "channel":slack_channel, "ignoreAddURL":True})
+      return str(removed_key_list)
+
+  def main():
+      list_name = demisto.args().get('list_name')
+      threshold = demisto.args().get('Threshold')
+      slack_channel = demisto.args().get('slack_channel')
+
+      try:
+          # TODO: replace the invoked command function with yours
+          return_results(remove_from_list(list_name, threshold, slack_channel))
+      except Exception as ex:
+          demisto.error(traceback.format_exc())  # print the traceback
+          return_error(f'Failed to execute BaseScript. Error: {str(ex)}')
+
+  if __name__ in ('__main__', '__builtin__', 'builtins'):
+      main()
+
+scripttarget: 0
+subtype: python3
+tags: []
+type: python
